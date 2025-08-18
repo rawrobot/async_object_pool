@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Single comprehensive test job with matrix
+  test:
+    name: Test (${{ matrix.rust }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, beta]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          # Add nightly only on Ubuntu to avoid too many jobs
+          - rust: nightly
+            os: ubuntu-latest
+            can-fail: true
+          # Special jobs for coverage and security (only on stable Ubuntu)
+          - rust: stable
+            os: ubuntu-latest
+            coverage: true
+            security: true
+    continue-on-error: ${{ matrix.can-fail || false }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.rust }}-cargo-
+          ${{ runner.os }}-cargo-
+
+    - name: Install development tools
+      run: make install-tools
+
+    # Run different checks based on matrix
+    - name: Run CI pipeline
+      if: matrix.rust == 'stable'
+      run: make ci
+
+    - name: Run tests only (non-stable)
+      if: matrix.rust != 'stable'
+      run: make test
+
+    - name: Run example
+      if: matrix.os == 'ubuntu-latest'
+      run: timeout 120s make example || true
+
+    # Coverage only on stable Ubuntu
+    - name: Generate coverage
+      if: matrix.coverage
+      run: make test-coverage-ci
+
+    - name: Upload coverage to codecov
+      if: matrix.coverage
+      uses: codecov/codecov-action@v4
+      with:
+        file: coverage/tarpaulin-report.lcov
+        fail_ci_if_error: false
+
+    # Security audit only on stable Ubuntu
+    - name: Run security audit
+      if: matrix.security
+      run: make security-check
+
+  

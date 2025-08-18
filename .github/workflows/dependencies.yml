@@ -1,0 +1,51 @@
+name: Dependencies
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Run every Monday at midnight UTC
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  update:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ubuntu-latest-stable-deps-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install tools
+      run: make install-tools
+
+    - name: Run maintenance checks
+      run: make maintenance
+
+    - name: Update dependencies
+      run: make update
+
+    - name: Test after update
+      run: make test
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: 'chore: update dependencies'
+        title: 'chore: update dependencies'
+        body: |
+          Automated dependency update.
+          
+          Please review the changes and ensure all tests pass.
+        branch: update-dependencies
+        delete-branch: true

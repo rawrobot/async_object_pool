@@ -1,0 +1,27 @@
+[package]
+name = "asyn_object_pool"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "A lock-free, thread-safe, size-limited object pool optimized for async environments with automatic object resetting"
+documentation = "https://docs.rs/asyn_object_pool"
+homepage = "https://github.com/rawrobot/async_object_pool"
+repository = "https://github.com/rawrobot/async_object_pool"
+readme = "README.md"
+keywords = ["async", "object-pool", "lock-free", "thread-safe", "tokio"]
+categories = ["asynchronous", "concurrency", "memory-management"]
+authors = ["Raw Robot <rawrobot@yahoo.com>"]
+
+
+[dependencies]
+crossbeam-queue = "0.3.12"
+
+# Add these dependencies for the examples
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full"] }
+thiserror = "1.0"
+rand = "0.8"
+
+[[example]]
+name = "tokio_example"
+path = "examples/tokio_example.rs"
