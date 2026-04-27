@@ -25,3 +25,7 @@ rand = "0.9"
 [[example]]
 name = "tokio_example"
 path = "examples/tokio_example.rs"
+
+[[example]]
+name = "message_bus"
+path = "examples/message_bus.rs"

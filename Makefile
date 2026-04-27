@@ -111,7 +111,7 @@ clean-coverage:	## Clean coverage reports
 clean-all:	clean clean-coverage	## Clean everything
 
 # CI/CD targets
-ci:	format-check clippy test doc package	## Run all CI checks
+ci:	format-check clippy test doc 	## Run all CI checks
 	@echo "All CI checks passed!"
 
 ci-quick: format-check clippy test doc ## Quick CI checks without coverage

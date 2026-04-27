@@ -60,18 +60,19 @@ use crate::Resettable;
 ///
 /// if, during an attempted return, a pool already has `maximum_capacity` objects in the pool, the pool will throw away
 /// that object.
-#[derive(Debug)]
-pub struct BundledPool<T: Resettable>
-where
-    T: Debug,
-{
+pub struct BundledPool<T: Resettable> {
     data: Arc<PoolData<T>>,
 }
 
-impl<T: Resettable> BundledPool<T>
-where
-    T: Debug,
-{
+impl<T: Resettable + Debug> Debug for BundledPool<T> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        f.debug_struct("BundledPool")
+            .field("data", &self.data)
+            .finish()
+    }
+}
+
+impl<T: Resettable> BundledPool<T> {
     /// Creates a new `BundledPool<T>`.
     ///
     /// # Arguments
@@ -157,6 +158,7 @@ where
     /// assert_eq!(item1.id, 42);
     /// assert_eq!(item2.id, 42);
     /// ```
+    #[must_use]
     #[inline]
     pub fn take(&self) -> BundledPoolItem<T> {
         let object = self
@@ -197,6 +199,7 @@ where
     /// let item2 = pool.try_take();
     /// assert!(item2.is_none());
     /// ```
+    #[must_use]
     #[inline]
     pub fn try_take(&self) -> Option<BundledPoolItem<T>> {
         self.data.items.pop().map(|object| BundledPoolItem {
@@ -211,10 +214,19 @@ where
         self.data.items.len()
     }
 
-    /// returns the number of objects currently in use. does not include objects that have been detached.
+    /// Returns the number of objects currently in use. Does not include objects that have been detached.
+    ///
+    /// This relies on the invariant that each live `BundledPoolItem` holds exactly one `Weak<PoolData<T>>`.
+    /// `Arc::weak_count` therefore equals the number of checked-out items.
     #[inline]
     pub fn used(&self) -> usize {
         Arc::weak_count(&self.data)
+        // The "invariant" part is the reason this works: it's only correct
+        // because each BundledPoolItem holds exactly one Weak — never zero,
+        // never two. If someone added a second Weak to PoolData somewhere
+        // inside the implementation, used() would overcount without any
+        // compiler error. The comment flags that as a contract future
+        // maintainers must preserve.
     }
 
     #[inline]
@@ -223,10 +235,7 @@ where
     }
 }
 
-impl<T: Resettable> Clone for BundledPool<T>
-where
-    T: Debug,
-{
+impl<T: Resettable> Clone for BundledPool<T> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
@@ -259,6 +268,14 @@ pub struct BundledPoolItem<T: Resettable> {
 }
 
 impl<T: Resettable> BundledPoolItem<T> {
+    /// Wraps this item in an `Arc` for shared ownership.
+    ///
+    /// **Limitations when wrapped in `Arc`:**
+    /// - `DerefMut` is unavailable unless you hold the sole reference (`Arc::get_mut`).
+    /// - `detach()` cannot be called because it requires consuming `self` by value.
+    ///
+    /// This is mainly useful when you need shared *immutable* access across threads,
+    /// or when `T` uses interior mutability.
     #[inline]
     pub fn into_arc(self) -> Arc<Self> {
         Arc::new(self)
@@ -303,6 +320,15 @@ impl<T: Resettable> AsRef<T> for BundledPoolItem<T> {
     fn as_ref(&self) -> &T {
         self.object
             .as_ref()
+            .expect("invariant: object is always `some`.")
+    }
+}
+
+impl<T: Resettable> AsMut<T> for BundledPoolItem<T> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut T {
+        self.object
+            .as_mut()
             .expect("invariant: object is always `some`.")
     }
 }
@@ -427,7 +453,8 @@ mod tests {
         for h in handles {
             h.join().unwrap();
         }
-        // All items dropped and returned, pool should not panic or deadlock
+        // used() == 0 proves every item was returned or discarded; available() guards capacity.
+        assert_eq!(pool.used(), 0);
         assert!(pool.available() <= 2);
     }
 
